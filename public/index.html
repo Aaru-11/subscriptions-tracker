@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subscription Tracker</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Subscription Tracker</h1>
+    </header>
+
+    <div class="summary">
+      <div class="total-spend">Total Monthly Spend: <span id="total">$0.00</span></div>
+      <div class="upcoming">Upcoming Renewals <span id="upcoming-count">0</span> this week</div>
+    </div>
+
+    <section class="filters">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <div id="category-pills" class="pills-container"></div>
+    </section>
+
+    <form id="add-form" class="add-form">
+      <input type="text" id="name" name="name" placeholder="Subscription name" required>
+      <input type="number" id="cost" name="cost" step="0.01" placeholder="Cost ($)" required>
+      <select id="billing-cycle" name="billingCycle" required>
+        <option value="monthly">Monthly</option>
+        <option value="yearly">Yearly</option>
+        <option value="weekly">Weekly</option>
+      </select>
+      <input type="date" id="next-renewal" name="nextRenewalDate" required>
+      <input type="text" id="category" name="category" placeholder="Category (optional)">
+      <button type="submit">Add Subscription</button>
+    </form>
+
+    <ul id="sub-list" class="sub-list"></ul>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
