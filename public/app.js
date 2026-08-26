@@ -1,203 +1,268 @@
-dbPath = 'subscriptions.db';
+const CURRENCIES = {
+  USD: { symbol: '$', rate: 1 },
+  INR: { symbol: '\u20B9', rate: 83.5 },
+  GBP: { symbol: '\u00A3', rate: 0.79 },
+  AUD: { symbol: 'A$', rate: 1.52 },
+};
 
-function normalizeCost(cost, billingCycle) {
-  if (billingCycle === 'yearly') return (cost / 12).toFixed(2);
-  if (billingCycle === 'weekly') return (cost * 4.33).toFixed(2);
-  return cost.toFixed(2);
+function fmt(usd) {
+  const { symbol, rate } = CURRENCIES[state.currency];
+  const converted = usd * rate;
+  return symbol + converted.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
-function isWithin7Days(dateStr) {
+const state = {
+  subs: [],
+  activeCategory: 'all',
+  search: '',
+  currency: localStorage.getItem('currency') || 'USD',
+};
+
+function normalizeMonthly(cost, billingCycle) {
+  if (billingCycle === 'yearly') return cost / 12;
+  if (billingCycle === 'weekly') return cost * 4.33;
+  return cost;
+}
+
+function daysUntil(dateStr) {
   const today = new Date();
-  const renewal = new Date(dateStr);
-  const diffDays = Math.ceil((renewal - today) / 86400000);
-  return diffDays >= 0 && diffDays <= 7;
-}
-
-function getFilterParams() {
-  const filter = document.querySelector('#sub-list .active-filter') ? 
-    document.querySelector('#sub-list .active-filter').dataset.filter : 'all';
-  if (filter === 'all') return {};
-  return { category: filter };
-}
-
-async function fetchSubs(filters = {}) {
-  const params = new URLSearchParams(filters);
-  const res = await fetch(`/api/subscriptions?${params}`);
-  return res.json();
-}
-
-function renderPills(categories) {
-  const container = document.getElementById('category-pills');
-  if (!categories || categories.length === 0) {
-    container.innerHTML = '';
-    return;
-  }
-  const unique = [...new Set(categories)];
-  container.innerHTML = `
-    <button class="filter-btn active" data-filter="all">All</button>
-  `;
-  unique.forEach(cat => {
-    const btn = document.createElement('button');
-    btn.className = 'pill' + (cat === 'all' ? ' active' : '');
-    btn.dataset.filter = cat;
-    btn.textContent = cat;
-    btn.onclick = () => {
-      document.querySelectorAll('#category-pills .pill').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      document.querySelector('[data-filter="all"]').classList.add('active');
-      renderSubs(filterByCat(cat));
-    };
-    container.appendChild(btn);
-  });
-}
-
-function filterByCat(cat) {
-  document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-  document.querySelector('[data-filter="all"]').classList.add('active');
-  document.querySelectorAll('.pill').forEach(p => {
-    if (p.dataset.filter === cat) p.classList.add('active');
-  });
-  return { category: cat };
-}
-
-async function renderSubs(filters = {}) {
-  const subs = await fetchSubs(filters);
-  const list = document.getElementById('sub-list');
-  list.innerHTML = '';
-
-  const today = new Date();
-  let upcomingCount = 0;
-
-  if (subs.length === 0) {
-    list.innerHTML = '<li class="no-subs">No subscriptions yet. Add one above!</li>';
-    updateTotal(0);
-    updateUpcomingCount(0);
-    return;
-  }
-
-  // Sort by nextRenewalDate ascending
-  subs.sort((a, b) => new Date(a.nextRenewalDate) - new Date(b.nextRenewalDate));
-
-  subs.forEach(sub => {
-    const monthlyCost = parseFloat(normalizeCost(sub.cost, sub.billingCycle));
-    const within7 = isWithin7Days(sub.nextRenewalDate);
-    if (within7) upcomingCount++;
-
-    const li = document.createElement('li');
-    li.className = 'sub-item' + (within7 ? ' upcoming-renewal' : '') + (sub.cancelCandidate ? ' cancel-candidate' : '');
-    li.dataset.id = sub.id;
-    li.dataset.category = sub.category || '';
-
-    li.innerHTML = `
-      <div class="sub-info">
-        <div class="name${sub.cancelCandidate ? ' cancel' : ''}" title="${sub.name}">${sub.name}</div>
-        <div class="details">
-          $${parseFloat(sub.cost).toFixed(2)} / ${sub.billingCycle} • 
-          Next: ${formatDate(sub.nextRenewalDate)}
-        </div>
-      </div>
-      <div class="sub-cost">
-        <span class="monthly">$${normalizeCost(sub.cost, sub.billingCycle)}/mo</span>
-        ${sub.cost ? `<span class="original">orig: $${parseFloat(sub.cost).toFixed(2)}</span>` : ''}
-      </div>
-      <div class="sub-actions">
-        <button class="btn btn-edit" title="Edit">✎</button>
-        <button class="btn btn-delete" title="Delete">×</button>
-        ${sub.cancelCandidate ? '' : `<button class="btn btn-cancel" title="Mark as cancel candidate">!</button>`}
-      </div>
-    `;
-
-    li.querySelector('.btn-delete').onclick = (e) => {
-      e.stopPropagation();
-      if (confirm('Remove this subscription?')) {
-        deleteSub(sub.id);
-      }
-    };
-
-    li.querySelector('.btn-cancel').onclick = (e) => {
-      e.stopPropagation();
-      toggleCancel(sub.id);
-    };
-
-    list.appendChild(li);
-  });
-
-  updateTotal(subs.reduce((sum, s) => sum + parseFloat(normalizeCost(s.cost, s.billingCycle)), 0));
-  updateUpcomingCount(upcomingCount);
+  today.setHours(0, 0, 0, 0);
+  const renewal = new Date(dateStr + 'T00:00:00');
+  return Math.round((renewal - today) / 86400000);
 }
 
 function formatDate(dateStr) {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function updateTotal(amount) {
-  const span = document.getElementById('total');
-  span.textContent = `$${amount.toFixed(2)}`;
+async function load() {
+  const res = await fetch('/api/subscriptions');
+  state.subs = await res.json();
+  render();
 }
 
-function updateUpcomingCount(count) {
-  const span = document.getElementById('upcoming-count');
-  span.textContent = count;
-  const upcoming = document.querySelector('.upcoming');
-  if (count > 0) {
-    upcoming.style.display = 'block';
+function visibleSubs() {
+  let list = [...state.subs];
+  if (state.activeCategory !== 'all') {
+    list = list.filter(s => (s.category || 'Uncategorized') === state.activeCategory);
+  }
+  if (state.search) {
+    const q = state.search.toLowerCase();
+    list = list.filter(s => s.name.toLowerCase().includes(q));
+  }
+  list.sort((a, b) => a.nextRenewalDate.localeCompare(b.nextRenewalDate));
+  return list;
+}
+
+function renderCategories() {
+  const container = document.getElementById('category-pills');
+  const cats = [...new Set(state.subs.map(s => s.category).filter(Boolean))].sort();
+  container.innerHTML = '';
+  const allBtn = pillButton('All', 'all');
+  container.appendChild(allBtn);
+  cats.forEach(cat => container.appendChild(pillButton(cat, cat)));
+}
+
+function pillButton(label, value) {
+  const btn = document.createElement('button');
+  btn.className = 'pill' + (state.activeCategory === value ? ' active' : '');
+  btn.textContent = label;
+  btn.dataset.value = value;
+  return containerPillHandler(btn);
+}
+
+function containerPillHandler(btn) {
+  btn.addEventListener('click', () => {
+    state.activeCategory = btn.dataset.value;
+    render();
+  });
+  return btn;
+}
+
+function renderTotal() {
+  const total = state.subs.reduce((sum, s) => sum + normalizeMonthly(s.cost, s.billingCycle), 0);
+  const el = document.getElementById('total');
+  animateCount(el, total);
+}
+
+function animateCount(el, target) {
+  const start = parseFloat(el.dataset.value || 0);
+  el.dataset.value = target;
+  const duration = 400;
+  const t0 = performance.now();
+  function tick(t) {
+    const p = Math.min((t - t0) / duration, 1);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = fmt(start + (target - start) * eased);
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+function renderUpcoming() {
+  const soon = state.subs.filter(s => {
+    const d = daysUntil(s.nextRenewalDate);
+    return d >= 0 && d <= 7;
+  });
+  const countEl = document.getElementById('upcoming-count');
+  countEl.textContent = soon.length;
+
+  const banner = document.getElementById('upcoming-banner');
+  const namesEl = document.getElementById('upcoming-names');
+  if (soon.length > 0) {
+    banner.classList.remove('hidden');
+    namesEl.textContent = soon.map(s => s.name).join(', ');
   } else {
-    upcoming.style.display = 'none';
+    banner.classList.add('hidden');
   }
 }
 
-async function toggleCancel(id) {
-  const res = await fetch(`/api/subscriptions/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cancelCandidate: true })
+function renderList() {
+  const list = document.getElementById('sub-list');
+  list.innerHTML = '';
+  const subs = visibleSubs();
+
+  if (subs.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'no-subs';
+    empty.textContent = state.search
+      ? `No subscriptions match "${state.search}"`
+      : 'No subscriptions yet. Add one above!';
+    list.appendChild(empty);
+    return;
+  }
+
+  subs.forEach((sub, i) => {
+    const days = daysUntil(sub.nextRenewalDate);
+    const soon = days >= 0 && days <= 7;
+    const cancelled = !!sub.cancelCandidate;
+
+    const li = document.createElement('li');
+    li.className = 'sub-item' + (soon ? ' upcoming-renewal' : '') + (cancelled ? ' cancel-candidate' : '');
+    li.style.animationDelay = (i * 40) + 'ms';
+
+    let countdown;
+    if (days < 0) countdown = `renewed ${-days} day${days === -1 ? '' : 's'} ago`;
+    else if (days === 0) countdown = 'renews today';
+    else if (days === 1) countdown = 'renews tomorrow';
+    else countdown = `renews in ${days} days`;
+
+    li.innerHTML = `
+      <div class="sub-info">
+        <div class="name-row">
+          <span class="name">${escapeHtml(sub.name)}</span>
+          ${sub.category ? `<span class="tag">${escapeHtml(sub.category)}</span>` : ''}
+          ${soon ? '<span class="badge">renewing soon</span>' : ''}
+          ${cancelled ? '<span class="badge cancel-badge">cancelling?</span>' : ''}
+        </div>
+        <div class="details">${fmt(sub.cost)} / ${sub.billingCycle} &bull; ${countdown} (${formatDate(sub.nextRenewalDate)})</div>
+      </div>
+      <div class="sub-cost">
+        <span class="monthly">${fmt(normalizeMonthly(sub.cost, sub.billingCycle))}</span>
+        <span class="per">/mo</span>
+      </div>
+      <div class="sub-actions">
+        <button class="btn btn-cancel" title="${cancelled ? 'Keep subscription' : 'Thinking of cancelling'}">${cancelled ? '&#10003;' : '!'}</button>
+        <button class="btn btn-delete" title="Delete">&times;</button>
+      </div>
+    `;
+
+    li.querySelector('.btn-delete').addEventListener('click', () => deleteSub(sub));
+    li.querySelector('.btn-cancel').addEventListener('click', () => toggleCancel(sub));
+
+    list.appendChild(li);
   });
-  const data = await res.json();
-  renderSubs(filterByCat(document.querySelector('[data-filter].active')?.dataset.filter || ''));
 }
 
-async function deleteSub(id) {
-  await fetch(`/api/subscriptions/${id}`, { method: 'DELETE' });
-  renderSubs(filterByCat(document.querySelector('[data-filter].active')?.dataset.filter || ''));
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 
-document.getElementById('add-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const form = e.target;
-  const sub = {
-    name: form.name.value,
-    cost: parseFloat(form.cost.value),
-    billingCycle: form['billing-cycle'].value,
-    nextRenewalDate: form['next-renewal'].value,
-    category: form.category.value || null
-  };
+function render() {
+  renderCategories();
+  renderTotal();
+  renderUpcoming();
+  renderList();
+}
+
+function toast(message, type = 'info') {
+  const container = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = message;
+  container.appendChild(el);
+  setTimeout(() => el.classList.add('show'), 10);
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 300);
+  }, 2500);
+}
+
+async function addSub(sub) {
   await fetch('/api/subscriptions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(sub)
+    body: JSON.stringify(sub),
   });
+  await load();
+  toast(`Added ${sub.name}`, 'success');
+}
+
+async function deleteSub(sub) {
+  if (!confirm(`Remove ${sub.name}?`)) return;
+  await fetch(`/api/subscriptions/${sub.id}`, { method: 'DELETE' });
+  await load();
+  toast(`Removed ${sub.name}`, 'danger');
+}
+
+async function toggleCancel(sub) {
+  await fetch(`/api/subscriptions/${sub.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cancelCandidate: !sub.cancelCandidate }),
+  });
+  await load();
+  toast(
+    !sub.cancelCandidate
+      ? `${sub.name} marked as cancel candidate`
+      : `${sub.name} kept`,
+    'warn'
+  );
+}
+
+document.getElementById('add-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const sub = {
+    name: form.elements['name'].value.trim(),
+    cost: parseFloat(form.elements['cost'].value),
+    billingCycle: form.elements['billingCycle'].value,
+    nextRenewalDate: form.elements['nextRenewalDate'].value,
+    category: form.elements['category'].value.trim() || null,
+  };
+  await addSub(sub);
   form.reset();
-  renderSubs(filterByCat(document.querySelector('[data-filter].active')?.dataset.filter || ''));
-};
-
-// Initialize: render on load + build category pills
-document.addEventListener('DOMContentLoaded', async () => {
-  // Build category pills from existing data first
-  const initialSubs = await fetchSubs({});
-  const cats = initialSubs.map(s => s.category).filter(Boolean);
-  renderPills(cats);
-  
-  // Then render the full list
-  renderSubs();
 });
 
-// Category filter buttons
-document.querySelectorAll('.pill').forEach(pill => {
-  pill.addEventListener('click', () => {
-    const filter = pill.dataset.filter;
-    document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-    pill.classList.add('active');
-    renderSubs(filterByCat(filter));
-  });
+document.getElementById('search').addEventListener('input', (e) => {
+  state.search = e.target.value.trim().toLowerCase();
+  renderList();
 });
+
+const currencySelect = document.getElementById('currency');
+currencySelect.value = state.currency;
+currencySelect.addEventListener('change', (e) => {
+  state.currency = e.target.value;
+  localStorage.setItem('currency', state.currency);
+  document.querySelector('.total-spend').dataset.value = '';
+  document.getElementById('total').dataset.value = '0';
+  render();
+});
+
+load();

@@ -13,30 +13,51 @@
     </header>
 
     <div class="summary">
-      <div class="total-spend">Total Monthly Spend: <span id="total">$0.00</span></div>
-      <div class="upcoming">Upcoming Renewals <span id="upcoming-count">0</span> this week</div>
+      <div class="total-spend">
+        <span class="label">Total Monthly Spend</span>
+        <span id="total" data-value="0">$0.00</span>
+      </div>
+      <input type="search" id="search" placeholder="Search subscriptions...">
+      <select id="currency" title="Display currency">
+        <option value="USD">USD $</option>
+        <option value="INR">INR &#8377;</option>
+        <option value="GBP">GBP &pound;</option>
+        <option value="AUD">AUD A$</option>
+      </select>
+    </div>
+
+    <div id="upcoming-banner" class="upcoming hidden">
+      <span class="icon">&#9888;</span>
+      <div>
+        <strong><span id="upcoming-count">0</span> renewal(s) within 7 days</strong>
+        <div id="upcoming-names"></div>
+      </div>
     </div>
 
     <section class="filters">
-      <button class="filter-btn active" data-filter="all">All</button>
       <div id="category-pills" class="pills-container"></div>
     </section>
 
     <form id="add-form" class="add-form">
-      <input type="text" id="name" name="name" placeholder="Subscription name" required>
-      <input type="number" id="cost" name="cost" step="0.01" placeholder="Cost ($)" required>
-      <select id="billing-cycle" name="billingCycle" required>
-        <option value="monthly">Monthly</option>
-        <option value="yearly">Yearly</option>
-        <option value="weekly">Weekly</option>
-      </select>
-      <input type="date" id="next-renewal" name="nextRenewalDate" required>
-      <input type="text" id="category" name="category" placeholder="Category (optional)">
-      <button type="submit">Add Subscription</button>
+      <h3>Add a subscription</h3>
+      <div class="form-grid">
+        <input type="text" id="name" name="name" placeholder="Name (e.g. Netflix)" required>
+        <input type="number" id="cost" name="cost" step="0.01" min="0.01" placeholder="Cost (USD)" required>
+        <select id="billing-cycle" name="billingCycle" required>
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+          <option value="weekly">Weekly</option>
+        </select>
+        <input type="date" id="next-renewal" name="nextRenewalDate" required>
+        <input type="text" id="category" name="category" placeholder="Category (optional)">
+        <button type="submit">Add</button>
+      </div>
     </form>
 
     <ul id="sub-list" class="sub-list"></ul>
   </main>
+
+  <div id="toasts" class="toasts"></div>
 
   <script src="/app.js"></script>
 </body>
